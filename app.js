@@ -22,10 +22,11 @@ app.get('/', async (req, res) => {
       return currentMaxDepth;
     };
 
-    const parseCategories = (categories, depth = 0) => {      
+    const parseCategories = (categories, depth = 0) => {
       for (let category in categories) {
-        if (depth === 0) {
+        if (depth === 0 || depth === 1) {
           currentCategoryMaxDepth = getCurrentMaxDepth(categories[category], depth) + 1;
+          console.log(currentCategoryMaxDepth);
         }
 
         categoryList += ' '.repeat(depth * 2);
@@ -47,7 +48,7 @@ app.get('/', async (req, res) => {
           } else {
             categoryList += `<li class="depth-${depth}"><code>${demText}${category}</code></li>`;
           }
-        } else {
+        } else {          
           if (depth === 2) {
             categoryList += `<li class="depth-${depth}" style="color: #ffe200">${demText}${category}:</li>`;
           } else if (depth === 3) {
