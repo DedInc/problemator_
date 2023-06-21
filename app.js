@@ -10,9 +10,61 @@ app.get('/', async (req, res) => {
     await problemator.loadSession();
 
     let categoryList = '';
-    for (const [category] of Object.entries(problemator.categories)) {
-      categoryList += `<li><code>- ${category}</code></li>`;
-    }
+    let dem = '-';
+
+    const getCurrentMaxDepth = (categories, depth = 0, currentMaxDepth = 0) => {
+      currentMaxDepth = Math.max(currentMaxDepth, depth);
+      for (let category in categories) {
+        if (typeof categories[category] === 'object') {
+          currentMaxDepth = getCurrentMaxDepth(categories[category], depth + 1, currentMaxDepth);
+        }
+      }
+      return currentMaxDepth;
+    };
+
+    const parseCategories = (categories, depth = 0) => {      
+      for (let category in categories) {
+        if (depth === 0) {
+          currentCategoryMaxDepth = getCurrentMaxDepth(categories[category], depth) + 1;
+        }
+
+        categoryList += ' '.repeat(depth * 2);
+        if (category == 'name') {
+          category = `${categories['id']}: ${categories['name']}`;
+        } else if (category == 'id') {
+          continue;
+        }        
+
+        let demText = (depth === 2 || depth === 3) ? '' : `${dem.repeat(depth)}`;
+
+        if (currentCategoryMaxDepth === 4) {
+          demText = (depth === 3 || depth === 4) ? '' : `${dem.repeat(depth)}`;
+        }
+
+        if (currentCategoryMaxDepth === 3) {
+          if (depth === 2) {
+            categoryList += `<li class="depth-${depth}"><p>${demText}${category}:</p></li>`;
+          } else {
+            categoryList += `<li class="depth-${depth}"><code>${demText}${category}</code></li>`;
+          }
+        } else {
+          if (depth === 2) {
+            categoryList += `<li class="depth-${depth}" style="color: #ffe200">${demText}${category}:</li>`;
+          } else if (depth === 3) {
+            categoryList += `<li class="depth-${depth}"><p>${demText}${category}:</p></li>`;
+          } else {
+            categoryList += `<li class="depth-${depth}"><code>${demText}${category}</code></li>`;
+          }
+        }
+
+        if (typeof categories[category] === 'object') {
+          categoryList += '<ul>';
+          parseCategories(categories[category], depth + 1);
+          categoryList += '</ul>';
+        }
+      }
+    };    
+    parseCategories(problemator.categories);
 
     const documentation = `
       <!DOCTYPE html>
@@ -78,6 +130,85 @@ app.get('/', async (req, res) => {
           margin-bottom: 0.8em;
         }
 
+        .depth-0 {
+          color: #90cdf4;
+          font-size: 1.1em;
+          font-weight: bold;
+          border-bottom: 1px solid #b8daff;
+          padding-bottom: 0.2em;
+        }
+
+        .depth-1 {
+          color: #b8daff;
+          font-size: 1.05em;
+          font-weight: bold;
+          margin-left: 2em;
+          border-left: 2px solid #b8daff;
+          padding-left: 0.5em;
+        }
+
+        .depth-2, .depth-3, .depth-4 {
+          color: #87c38f;
+          font-size: 1em;
+          font-weight: bold;
+          margin-left: 4em;
+        }
+
+        .depth-3, .depth-4 {
+          font-style: italic;
+        }
+
+        .depth-4 {
+          margin-left: 6em;
+        }
+
+        .depth-3 code {
+          font-size: 0.9em;
+        }
+
+        .depth-0 code, .depth-1 code, .depth-2 code, .depth-3 code {
+          background-color: #333;
+          color: #fff;
+          padding: 2px 5px;
+          border-radius: 3px;
+        }
+
+        ul.depth-0 {
+          margin-left: 0;
+          padding-left: 0;
+        }
+
+        ul.depth-0 > li {
+          list-style: none;
+        }
+
+        ul.depth-1 {
+          margin-left: 2em;
+          padding-left: 0;
+        }
+
+        ul.depth-1 > li {
+          list-style: none;
+        }
+
+        ul.depth-2 {
+          margin-left: 4em;
+          padding-left: 0;
+        }
+
+        ul.depth-2 > li {
+          list-style: none;
+        }
+
+        ul.depth-3 {
+          margin-left: 6em;
+          padding-left: 0;
+        }
+
+        ul.depth-3 > li {
+          list-style: none;
+        }
+
         a {
           color: #fff;
           text-decoration: none;
@@ -120,7 +251,7 @@ app.get('/', async (req, res) => {
         });
       </script>
     </head>
-    <body>
+     <body>
       <h1>Problemator API Documentation</h1>
       <p>Welcome to the API documentation for the Problemator API!</p>
       <h2>Endpoints</h2>
@@ -169,7 +300,7 @@ app.get('/', async (req, res) => {
       </table>
 
       <h2>Categories</h2>
-      <p>These are the available categories:</p>
+      <p>Here is a list of categories and subcategories:</p>
       <ul>
         ${categoryList}
       </ul>
@@ -177,9 +308,10 @@ app.get('/', async (req, res) => {
   </html>
     `;
 
-      res.send(documentation);
-    } catch (error) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.send(documentation);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Internal Server Error');
   }
 });
 

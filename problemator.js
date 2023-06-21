@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { CookieJar, Cookie } = require('tough-cookie');
+const { Cookie } = require('tough-cookie');
 
 class Problemator {
   constructor() {
@@ -7,20 +7,45 @@ class Problemator {
     this.loadSession();
   }
 
-  searchCategories(cats) {
-    for (const c of cats) {
-      if ('Subcategories' in c) {
-        this.searchCategories(c['Subcategories']);
+  convertCategories(categoriesDict, idCounter = 0) {
+    const convertedData = {};
+
+    for (const category of categoriesDict) {
+      const categoryName = category.Display;
+      const subcategories = category.Subcategories || [];
+
+      if (subcategories.length > 0) {
+        const [convertedSubcategories, newIdCounter] = this.convertCategories(subcategories, idCounter);
+        convertedData[categoryName] = convertedSubcategories;
+        idCounter = newIdCounter;
       } else {
-        this.categories[c['LinkTo']] = Object.keys(this.categories).length;
+        const linktoId = category.LinkTo;
+
+        if (linktoId !== null && linktoId !== undefined) {
+          convertedData[categoryName] = { name: linktoId, id: idCounter };
+          idCounter++;
+        }
       }
     }
+
+    return [convertedData, idCounter];
   }
 
-  getCategory(id) {
-    for (const cat in this.categories) {
-      if (this.categories[cat] === id) {
-        return cat;
+  getCategory(id, categories = null) {
+    if (categories === null) {
+      categories = this.categories;
+    }
+
+    for (const [cat, value] of Object.entries(categories)) {
+      if (typeof value === 'object') {
+        if ('id' in value && value.id === id) {
+          return value.name;
+        }
+
+        const subcategoryResult = this.getCategory(id, value);
+        if (subcategoryResult) {
+          return subcategoryResult;
+        }
       }
     }
   }
@@ -38,37 +63,56 @@ class Problemator {
     this.session = axios.create({ headers, withCredentials: true });
     this.session.defaults.headers.Cookie = response.headers['set-cookie'].join('; ');
 
-    this.searchCategories(response.data['Categories']['Categories']);
-    this.API = response.data['domain'];
+    const [convertedCategories] = this.convertCategories(response.data.Categories.Categories);
+    this.categories = convertedCategories;
+    this.API = response.data.domain;
   }
 
   async checkProblem(problem, answer) {
-    const lvl = problem['difficulty'];
-    const pid = problem['id'];
-    const machine = problem['machine'];    
+    const lvl = problem.difficulty;
+    const pid = problem.id;
+    const machine = problem.machine;
 
-    for (const c of problem['session']) {      
-      const cookie = new Cookie(c);      
-      let old_value = this.session.defaults.headers.Cookie.split('JSESSIONID=')[1].split(';')[0];
-      this.session.defaults.headers.Cookie = this.session.defaults.headers.Cookie.replace(old_value, c['value']);
-    }
+    problem.session.forEach((c) => {
+      const cookie = new Cookie(c);
+      const oldValue = this.session.defaults.headers.Cookie.split('JSESSIONID=')[1].split(';')[0];
+      this.session.defaults.headers.Cookie = this.session.defaults.headers.Cookie.replace(oldValue, c.value);
+    });
 
-    const response = await this.session.get(`${this.API}/input/wpg/checkanswer.jsp?attempt=1&difficulty=${lvl}&load=true&problemID=${pid}&query=${answer}&s=${machine}&type=InputField`);
+    const params = {
+      attempt: 1,
+      difficulty: lvl,
+      load: 'true',
+      problemID: pid,
+      query: answer,
+      s: machine,
+      type: 'InputField',
+    };
+
+    const response = await this.session.get(`${this.API}/input/wpg/checkanswer.jsp`, { params });
 
     return {
-      'correct': response.data['correct'],
-      'hint': response.data['hint'],
-      'solution': response.data['solution'],
+      correct: response.data.correct,
+      hint: response.data.hint,
+      solution: response.data.solution,
+      attempt: response.data.attempt,
     };
   }
 
   async generateProblem(lvl = 0, type = 'IntegerAddition') {
     const difficulty = { 0: 'Beginner', 1: 'Intermediate', 2: 'Advanced' }[lvl];
 
-    const response = await this.session.get(`${this.API}/input/wpg/problem.jsp?count=1&difficulty=${difficulty}&load=1&type=${type}`);
+    const params = {
+      count: 1,
+      difficulty: difficulty,
+      load: 'true',
+      type: type,
+    };
 
-    const problems = response.data['problems'];
-    const machine = response.data['machine'];
+    const response = await this.session.get(`${this.API}/input/wpg/problem.jsp`, { params });
+
+    const problems = response.data.problems;
+    const machine = response.data.machine;
     const cookies = [];
 
     if (response.headers['set-cookie']) {
@@ -87,12 +131,12 @@ class Problemator {
     }
 
     return {
-      'text': problem['string_question'],
-      'image': problem['problem_image'],
-      'difficulty': difficulty,
-      'id': problem['problem_id'],
-      'machine': machine,
-      'session': cookies,
+      text: problem.string_question,
+      image: problem.problem_image,
+      difficulty: difficulty,
+      question: problem.question,      
+      machine: machine,
+      session: cookies,
     };
   }
 }
