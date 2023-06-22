@@ -26,7 +26,6 @@ app.get('/', async (req, res) => {
       for (let category in categories) {
         if (depth === 0 || depth === 1) {
           currentCategoryMaxDepth = getCurrentMaxDepth(categories[category], depth) + 1;
-          console.log(currentCategoryMaxDepth);
         }
 
         categoryList += ' '.repeat(depth * 2);
@@ -297,6 +296,13 @@ app.get('/', async (req, res) => {
               </ul>
             </td>
           </tr>
+          <tr>
+            <td><code>/api/categories</code></td>
+            <td>GET</td>
+            <td>
+              Get all available categories.
+            </td>
+          </tr>
         </tbody>
       </table>
 
@@ -353,6 +359,16 @@ app.get('/api/check-problem', async (req, res) => {
     const problem = JSON.parse(decodeURIComponent(req.query.problem));    
     const result = await problemator.checkProblem(problem, req.query.answer);    
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/categories', async (req, res) => {
+  try {
+    const problemator = new Problemator();
+    await problemator.loadSession();
+    res.json(problemator.categories);
   } catch (error) {
     res.status(500).json({ error: 'Internal server error' });
   }
